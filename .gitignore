@@ -1,0 +1,22 @@
+# vim
+*~
+*.swp
+
+# Windows Explore, OS X Finder,...
+._*
+.DS_Store
+Thumbs.db
+*.DS_Store
+
+*.log
+
+# cabal
+cabal.sandbox.config
+.cabal-sandbox
+/dist
+
+# stack
+.stack-work
+
+# client_session
+client_session_key.aes
