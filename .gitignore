@@ -20,3 +20,5 @@ cabal.sandbox.config
 
 # client_session
 client_session_key.aes
+
+*.schema

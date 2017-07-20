@@ -58,6 +58,9 @@ library
   -- Other library packages from which modules are imported.
   build-depends:       base >=4.9 && <4.10
                      , text
+                     , megaparsec
+                     , QuickCheck
+                     , quickcheck-instances >= 0.3.8
 
   -- Directories containing source files.
   hs-source-dirs:      src/lib
@@ -66,19 +69,6 @@ library
   default-language:    Haskell2010
 
   GHC-Options:       -Wall -O2 -threaded -fno-warn-unused-do-bind -fno-warn-name-shadowing
-
-executable ldap-schema
-  default-language:  Haskell2010
-
-  main-is:           Main.hs
-
-  hs-source-dirs:    src/bin/ldap-schema
-
-  other-modules:
-
-  GHC-Options:       -Wall -O2 -threaded -fno-warn-unused-do-bind -fno-warn-name-shadowing -fno-warn-orphans -rtsopts "-with-rtsopts=-N"
-  build-depends:       base >= 4.9 && <4.10
-                     , ldap-schema
 
 Test-Suite ldap-schema-tests
   default-language:  Haskell2010
@@ -102,23 +92,8 @@ Test-Suite ldap-schema-tests
                      , rematch >= 0.2
                      , text >= 1.2
                      , quickcheck-instances >= 0.3.8
-
-Benchmark ldap-schema-bench
-  default-language:  Haskell2010
-  type:              exitcode-stdio-1.0
-
-  main-is:           BenchMain.hs
-
-  hs-source-dirs:    src/bench/ldap-schema-bench
-
-  other-modules:     Data.LDAPSchemaBench
-
-  GHC-Options:       -Wall -O2 -threaded -fno-warn-unused-do-bind -fno-warn-name-shadowing -fno-warn-orphans -rtsopts "-with-rtsopts=-N"
-
-  build-depends:       base >= 4.9 && < 4.10
-                     , ldap-schema
-                     , criterion
+                     , megaparsec
 
 source-repository head
   type: git
-  location: git@git.taladar.net:ldap-schema.git
+  location: https://github.com/taladar/ldap-schema

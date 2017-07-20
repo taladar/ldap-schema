@@ -1,0 +1,3 @@
+* order of parameters for attribute, object class needs to be more flexible
+* we do not parse lengths on SYNTAX statements yet
+* we do not parse comments yet
