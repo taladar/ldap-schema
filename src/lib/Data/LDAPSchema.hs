@@ -24,7 +24,7 @@ module Data.LDAPSchema
   ) where
 
 import           Data.Either (partitionEithers)
-import           Data.List (intercalate)
+import           Data.List (intercalate, sort)
 import           Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NonEmpty
 import           Data.Monoid ((<>))
@@ -40,7 +40,7 @@ import Test.QuickCheck.Instances ()
 
 newtype OID =
   OID { unOID :: NonEmpty Integer
-      } deriving Eq
+      } deriving (Eq,Ord)
 
 instance Show OID where
   show (OID xs) = intercalate "." (NonEmpty.toList $ NonEmpty.map show xs)
@@ -59,7 +59,7 @@ oidP = label "OID" $ do
 
 newtype AttributeName =
   AttributeName { unAttributeName :: Text
-                } deriving (Eq)
+                } deriving (Eq, Ord)
 
 instance Show AttributeName where
   show (AttributeName v) = T.unpack v
@@ -89,7 +89,52 @@ data Attribute =
             , attributeSubstringMatch :: Maybe Text
             } deriving (Eq, Show)
 
-attributeP ::Parser Attribute
+data AttributeParameterResult =
+    AttributeDescriptionResult Text
+  | AttributeSuperiorResult AttributeName
+  | AttributeSyntaxResult OID
+  | AttributeSingleValueResult Bool
+  | AttributeEqualityMatchResult Text
+  | AttributeSubstringMatchResult Text
+    deriving (Eq, Ord, Show)
+
+attributeDescriptionP :: Parser AttributeParameterResult
+attributeDescriptionP = label "AttributeDescriptionResult" $ AttributeDescriptionResult <$> do
+  string "DESC"
+  space
+  char '\''
+  T.pack <$> manyTill (noneOf "'\n") (char '\'')
+
+attributeSuperiorP :: Parser AttributeParameterResult
+attributeSuperiorP = label "AttributeSuperiorResult" $ AttributeSuperiorResult <$> do
+  string "SUP"
+  space
+  attributeNameP
+
+attributeSyntaxP :: Parser AttributeParameterResult
+attributeSyntaxP = label "AttributeSyntaxResult" $ AttributeSyntaxResult <$> do
+  string "SYNTAX"
+  space
+  oidP
+
+attributeSingleValueP :: Parser AttributeParameterResult
+attributeSingleValueP = label "AttributeSingleValueResult" $ AttributeSingleValueResult <$> do
+  string "SINGLE-VALUE"
+  return True
+
+attributeEqualityMatchP :: Parser AttributeParameterResult
+attributeEqualityMatchP = label "AttributeEqualityMatchResult" $ AttributeEqualityMatchResult <$> do
+  string "EQUALITY"
+  space
+  T.pack <$> some alphaNumChar
+
+attributeSubstringMatchP :: Parser AttributeParameterResult
+attributeSubstringMatchP = label "AttributeSubstringMatchResult" $ AttributeSubstringMatchResult <$> do
+  string "SUBSTR"
+  space
+  T.pack <$> some alphaNumChar
+
+attributeP :: Parser Attribute
 attributeP = label "Attribute" $ do
   string "attributetype"
   space
@@ -103,8 +148,8 @@ attributeP = label "Attribute" $ do
       choice
         [ between
             (char '(' >> space)
-            (space >> char ')')
-            (sepBy1
+            (char ')')
+            (sepEndBy1
               (between
                 (char '\'')
                 (char '\'')
@@ -118,37 +163,57 @@ attributeP = label "Attribute" $ do
             (pure <$> attributeNameP)
         ]
     space
-    attributeDescription <- optional $ do
-      string "DESC"
-      space
-      char '\''
-      T.pack <$> manyTill anyChar (char '\'')
-    space
-    attributeSuperior <- optional $ do
-      string "SUP"
-      space
-      attributeNameP
-    space
-    attributeSyntax <- optional (string "SYNTAX" >> oidP)
-    space
-    attributeSingleValue <- option False $ do
-      string "SINGLE-VALUE"
-      return True
-    space
-    attributeEqualityMatch <- optional $ do
-      string "EQUALITY"
-      space
-      T.pack <$> some alphaNumChar
-    space
-    attributeSubstringMatch <- optional $ do
-      string "SUBSTR"
-      space
-      T.pack <$> some alphaNumChar
+    parameters <-
+      endBy (choice
+        [ attributeDescriptionP
+        , attributeSuperiorP
+        , attributeSyntaxP
+        , attributeSingleValueP
+        , attributeEqualityMatchP
+        , attributeSubstringMatchP
+        ]) space
+    let sortedParameters = Data.List.sort parameters
+        (sortedParameters2, attributeDescription) =
+          case sortedParameters of
+            (AttributeDescriptionResult v):xs ->
+              (xs, Just v)
+            xs ->
+              (xs, Nothing)
+        (sortedParameters3, attributeSuperior) =
+          case sortedParameters2 of
+            (AttributeSuperiorResult v):xs ->
+              (xs, Just v)
+            xs ->
+              (xs, Nothing)
+        (sortedParameters4, attributeSyntax) =
+          case sortedParameters3 of
+            (AttributeSyntaxResult v):xs ->
+              (xs, Just v)
+            xs ->
+              (xs, Nothing)
+        (sortedParameters5, attributeSingleValue) =
+          case sortedParameters4 of
+            (AttributeSingleValueResult v):xs ->
+              (xs, v)
+            xs ->
+              (xs, False)
+        (sortedParameters6, attributeEqualityMatch) =
+          case sortedParameters5 of
+            (AttributeEqualityMatchResult v):xs ->
+              (xs, Just v)
+            xs ->
+              (xs, Nothing)
+        attributeSubstringMatch =
+          case sortedParameters6 of
+            (AttributeSubstringMatchResult v):_ ->
+              Just v
+            _ ->
+              Nothing
     return $ Attribute{..}
 
 newtype ObjectClassName =
   ObjectClassName { unObjectClassName :: Text
-                  } deriving (Eq)
+                  } deriving (Eq, Ord)
 
 instance Show ObjectClassName where
   show (ObjectClassName v) = T.unpack v
@@ -208,8 +273,8 @@ objectClassP = label "ObjectClass" $ do
       choice
         [ between
             (char '(' >> space)
-            (space >> char ')')
-            (sepBy1
+            (char ')')
+            (sepEndBy1
               (between
                 (char '\'')
                 (char '\'')
@@ -251,6 +316,7 @@ objectClassP = label "ObjectClass" $ do
         sepBy1
           attributeNameP
           (try $ space >> char '$' >> space)
+    space
     return $ ObjectClass{..}
 
 data LDAPSchema =
