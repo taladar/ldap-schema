@@ -85,6 +85,8 @@ tests =
                 (Just (AttributeName "distinguishedName"))
                 Nothing
                 False
+                False
+                Nothing
                 Nothing
                 Nothing)
         ]
@@ -103,5 +105,44 @@ tests =
         [ testCase "Parsing saltation.schema works" $ do
             content <- Data.Text.IO.readFile "saltation.schema"
             R.expect (parse ldapSchemaP "saltation.schema" content) isParseSuccess
+        , testCase "Parsing collective.schema works" $ do
+            content <- Data.Text.IO.readFile "collective.schema"
+            R.expect (parse ldapSchemaP "collective.schema" content) isParseSuccess
+        , testCase "Parsing corba.schema works" $ do
+            content <- Data.Text.IO.readFile "corba.schema"
+            R.expect (parse ldapSchemaP "corba.schema" content) isParseSuccess
+        , testCase "Parsing core.schema works" $ do
+            content <- Data.Text.IO.readFile "core.schema"
+            R.expect (parse ldapSchemaP "core.schema" content) isParseSuccess
+        , testCase "Parsing cosine.schema works" $ do
+            content <- Data.Text.IO.readFile "cosine.schema"
+            R.expect (parse ldapSchemaP "cosine.schema" content) isParseSuccess
+        -- , testCase "Parsing duaconf.schema works" $ do
+        --     content <- Data.Text.IO.readFile "duaconf.schema"
+        --     R.expect (parse ldapSchemaP "duaconf.schema" content) isParseSuccess
+        -- , testCase "Parsing dyngroup.schema works" $ do
+        --     content <- Data.Text.IO.readFile "dyngroup.schema"
+        --     R.expect (parse ldapSchemaP "dyngroup.schema" content) isParseSuccess
+        , testCase "Parsing inetorgperson.schema works" $ do
+            content <- Data.Text.IO.readFile "inetorgperson.schema"
+            R.expect (parse ldapSchemaP "inetorgperson.schema" content) isParseSuccess
+        , testCase "Parsing java.schema works" $ do
+            content <- Data.Text.IO.readFile "java.schema"
+            R.expect (parse ldapSchemaP "java.schema" content) isParseSuccess
+        , testCase "Parsing misc.schema works" $ do
+            content <- Data.Text.IO.readFile "misc.schema"
+            R.expect (parse ldapSchemaP "misc.schema" content) isParseSuccess
+        , testCase "Parsing nis.schema works" $ do
+            content <- Data.Text.IO.readFile "nis.schema"
+            R.expect (parse ldapSchemaP "nis.schema" content) isParseSuccess
+        -- , testCase "Parsing pmi.schema works" $ do
+        --     content <- Data.Text.IO.readFile "pmi.schema"
+        --     R.expect (parse ldapSchemaP "pmi.schema" content) isParseSuccess
+        , testCase "Parsing ppolicy.schema works" $ do
+            content <- Data.Text.IO.readFile "ppolicy.schema"
+            R.expect (parse ldapSchemaP "ppolicy.schema" content) isParseSuccess
+        -- , testCase "Parsing openldap.schema works" $ do
+        --     content <- Data.Text.IO.readFile "openldap.schema"
+        --     R.expect (parse ldapSchemaP "openldap.schema" content) isParseSuccess
         ]
     ]

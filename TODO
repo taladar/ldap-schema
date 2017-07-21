@@ -1,3 +1,2 @@
-* order of parameters for attribute, object class needs to be more flexible
-* we do not parse lengths on SYNTAX statements yet
-* we do not parse comments yet
+* order of parameters for object class needs to be more flexible
+* support objectIdentifier (files using this are commented out in test suite)

@@ -23,10 +23,12 @@ module Data.LDAPSchema
   , ldapSchemaP
   ) where
 
+import           Control.Monad (void)
 import           Data.Either (partitionEithers)
 import           Data.List (intercalate, sort)
 import           Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NonEmpty
+import           Data.Maybe (isNothing,fromJust)
 import           Data.Monoid ((<>))
 import           Data.Text (Text)
 import qualified Data.Text as T
@@ -74,28 +76,41 @@ instance QC.Arbitrary AttributeName where
 
 attributeNameP :: Parser AttributeName
 attributeNameP = label "AttributeName" $ do
-  s <- T.singleton <$> oneOf ['a'..'z']
-  u <- T.pack <$> many (oneOf (['a'..'z'] ++ ['A'..'Z'] ++ ['0'..'9']))
+  s <- T.singleton <$> oneOf (['a'..'z'] ++ ['A'..'Z'])
+  u <- T.pack <$> many (oneOf (['a'..'z'] ++ ['A'..'Z'] ++ ['0'..'9'] ++ ['-']))
   return $ AttributeName $ s <> u
+
+data AttributeSyntax =
+  AttributeSyntax { syntaxOID :: OID
+                  , syntaxLength :: Maybe Integer
+                  } deriving (Eq, Ord, Show)
+
+instance QC.Arbitrary AttributeSyntax where
+  arbitrary =
+    AttributeSyntax <$> QC.arbitrary <*> (QC.suchThat QC.arbitrary (\x -> if isNothing x then True else (fromJust x) > 0))
 
 data Attribute =
   Attribute { attributeOID :: OID
             , attributeNames :: NonEmpty AttributeName
             , attributeDescription :: Maybe Text
             , attributeSuperior :: Maybe AttributeName
-            , attributeSyntax :: Maybe OID -- TODO: apparently has optional max length
+            , attributeSyntax :: Maybe AttributeSyntax
             , attributeSingleValue :: Bool
+            , attributeCollective :: Bool
             , attributeEqualityMatch :: Maybe Text
             , attributeSubstringMatch :: Maybe Text
+            , attributeOrdering :: Maybe Text
             } deriving (Eq, Show)
 
 data AttributeParameterResult =
     AttributeDescriptionResult Text
   | AttributeSuperiorResult AttributeName
-  | AttributeSyntaxResult OID
+  | AttributeSyntaxResult AttributeSyntax
   | AttributeSingleValueResult Bool
+  | AttributeCollectiveResult Bool
   | AttributeEqualityMatchResult Text
   | AttributeSubstringMatchResult Text
+  | AttributeOrderingResult Text
     deriving (Eq, Ord, Show)
 
 attributeDescriptionP :: Parser AttributeParameterResult
@@ -115,11 +130,22 @@ attributeSyntaxP :: Parser AttributeParameterResult
 attributeSyntaxP = label "AttributeSyntaxResult" $ AttributeSyntaxResult <$> do
   string "SYNTAX"
   space
-  oidP
+  syntaxOID <- oidP
+  syntaxLength <- optional $ do
+    char '{'
+    i <- integer
+    char '}'
+    return i
+  return $ AttributeSyntax{..}
 
 attributeSingleValueP :: Parser AttributeParameterResult
 attributeSingleValueP = label "AttributeSingleValueResult" $ AttributeSingleValueResult <$> do
   string "SINGLE-VALUE"
+  return True
+
+attributeCollectiveP :: Parser AttributeParameterResult
+attributeCollectiveP = label "AttributeCollectiveResult" $ AttributeCollectiveResult <$> do
+  string "COLLECTIVE"
   return True
 
 attributeEqualityMatchP :: Parser AttributeParameterResult
@@ -134,9 +160,15 @@ attributeSubstringMatchP = label "AttributeSubstringMatchResult" $ AttributeSubs
   space
   T.pack <$> some alphaNumChar
 
+attributeOrderingP :: Parser AttributeParameterResult
+attributeOrderingP = label "AttributeOrderingResult" $ AttributeOrderingResult <$> do
+  string "ORDERING"
+  space
+  T.pack <$> some alphaNumChar
+
 attributeP :: Parser Attribute
 attributeP = label "Attribute" $ do
-  string "attributetype"
+  string' "attributetype"
   space
   between (char '(') (char ')') $ do
     space
@@ -169,8 +201,10 @@ attributeP = label "Attribute" $ do
         , attributeSuperiorP
         , attributeSyntaxP
         , attributeSingleValueP
+        , attributeCollectiveP
         , attributeEqualityMatchP
         , attributeSubstringMatchP
+        , attributeOrderingP
         ]) space
     let sortedParameters = Data.List.sort parameters
         (sortedParameters2, attributeDescription) =
@@ -197,15 +231,27 @@ attributeP = label "Attribute" $ do
               (xs, v)
             xs ->
               (xs, False)
-        (sortedParameters6, attributeEqualityMatch) =
+        (sortedParameters6, attributeCollective) =
           case sortedParameters5 of
+            (AttributeCollectiveResult v):xs ->
+              (xs, v)
+            xs ->
+              (xs, False)
+        (sortedParameters7, attributeEqualityMatch) =
+          case sortedParameters6 of
             (AttributeEqualityMatchResult v):xs ->
               (xs, Just v)
             xs ->
               (xs, Nothing)
-        attributeSubstringMatch =
-          case sortedParameters6 of
-            (AttributeSubstringMatchResult v):_ ->
+        (sortedParameters8, attributeSubstringMatch) =
+          case sortedParameters7 of
+            (AttributeSubstringMatchResult v):xs ->
+              (xs, Just v)
+            xs ->
+              (xs, Nothing)
+        attributeOrdering =
+          case sortedParameters8 of
+            (AttributeOrderingResult v):_ ->
               Just v
             _ ->
               Nothing
@@ -228,8 +274,8 @@ instance QC.Arbitrary ObjectClassName where
 
 objectClassNameP :: Parser ObjectClassName
 objectClassNameP = label "ObjectClassName" $ do
-  s <- T.singleton <$> oneOf ['a'..'z']
-  u <- T.pack <$> many (oneOf (['a'..'z'] ++ ['A'..'Z'] ++ ['0'..'9']))
+  s <- T.singleton <$> oneOf (['a'..'z'] ++ [ 'A'..'Z' ])
+  u <- T.pack <$> many (oneOf (['a'..'z'] ++ ['A'..'Z'] ++ ['0'..'9'] ++ ['-']))
   return $ ObjectClassName $ s <> u
 
 data ObjectClassType =
@@ -254,14 +300,14 @@ data ObjectClass =
               , objectClassNames :: NonEmpty ObjectClassName
               , objectClassDescription :: Maybe Text
               , objectClassType :: ObjectClassType
-              , objectClassSuperior :: Maybe ObjectClassName
+              , objectClassSuperior :: [ObjectClassName]
               , objectClassRequiredAttributes :: [AttributeName]
               , objectClassOptionalAttributes :: [AttributeName]
               } deriving (Eq, Show)
 
 objectClassP :: Parser ObjectClass
 objectClassP = label "ObjectClass" $ do
-  string "objectclass"
+  string' "objectclass"
   space
   between (char '(') (char ')') $ do
     space
@@ -294,28 +340,40 @@ objectClassP = label "ObjectClass" $ do
       char '\''
       T.pack <$> manyTill anyChar (char '\'')
     space
-    objectClassSuperior <- optional $ do
+    objectClassSuperior <- option [] $ do
       string "SUP"
       space
-      objectClassNameP
+      choice
+        [ between (char '(' >> space) (space >> char ')') $ do
+            sepBy1
+              objectClassNameP
+              (try $ space >> char '$' >> space)
+        , pure <$> objectClassNameP
+        ]
     space
     objectClassType <- objectClassTypeP
     space
     objectClassRequiredAttributes <- option [] $ do
       string "MUST"
       space
-      between (char '(' >> space) (space >> char ')') $ do
-        sepBy1
-          attributeNameP
-          (try $ space >> char '$' >> space)
+      choice
+        [ between (char '(' >> space) (space >> char ')') $ do
+            sepBy1
+              attributeNameP
+              (try $ space >> char '$' >> space)
+        , pure <$> attributeNameP
+        ]
     space
     objectClassOptionalAttributes <- option [] $ do
       string "MAY"
       space
-      between (char '(' >> space) (space >> char ')') $ do
-        sepBy1
-          attributeNameP
-          (try $ space >> char '$' >> space)
+      choice
+        [ between (char '(' >> space) (space >> char ')') $ do
+            sepBy1
+              attributeNameP
+              (try $ space >> char '$' >> space)
+        , pure <$> attributeNameP
+        ]
     space
     return $ ObjectClass{..}
 
@@ -324,10 +382,19 @@ data LDAPSchema =
              , ldapSchemaAttributes :: [Attribute]
              } deriving (Eq, Show)
 
+comment :: Parser ()
+comment = label "Comment" $ do
+  char '#'
+  void $ manyTill (noneOf "\n") newline
+
+uninteresting :: Parser ()
+uninteresting =  label "Comment or whitespace lines" $ do
+  skipMany (eitherP comment (void spaceChar))
+
 ldapSchemaP :: Parser LDAPSchema
 ldapSchemaP = label "LDAPSchema" $ do
   res <- manyTill
-    (space >> (eitherP (objectClassP) (attributeP)))
+    ((try uninteresting) >> (eitherP (objectClassP) (attributeP)))
     (try $ space >> eof)
   return $ (uncurry LDAPSchema) $ partitionEithers res
 
